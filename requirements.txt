@@ -1,0 +1,15 @@
+openai 
+ffmpeg
+langchain
+docarray
+pytube 
+python-dotenv
+tiktoken 
+scikit-learn
+langchain-groq
+pytubefix
+langchain-community
+langchain-core
+ruff
+pypdf
+git+https://github.com/openai/whisper.git
