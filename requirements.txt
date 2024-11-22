@@ -10,6 +10,7 @@ langchain-groq
 pytubefix
 langchain-community
 langchain-core
+sentence_transformers
 ruff
 pypdf
 git+https://github.com/openai/whisper.git
