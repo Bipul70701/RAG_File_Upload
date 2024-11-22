@@ -12,7 +12,6 @@ from langchain_community.vectorstores import DocArrayInMemorySearch
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.output_parsers import StrOutputParser
-import PyPDF2
 import shutil
 
 
