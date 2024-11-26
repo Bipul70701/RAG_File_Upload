@@ -1,63 +1,156 @@
 import os
-from dotenv import load_dotenv
 import random
-import whisper
-import tempfile
 import streamlit as st
 from langchain.prompts import ChatPromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain_community.vectorstores import DocArrayInMemorySearch
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.output_parsers import StrOutputParser
 import shutil
 
-
-def helper(uploaded_files):
-    os.mkdir(os.path.join(os.getcwd(),st.session_state['id']))
+# Helper function to handle file uploads
+def save_uploaded_files(uploaded_files, session_id):
+    directory = os.path.join(os.getcwd(), session_id)
+    os.makedirs(directory, exist_ok=True)
     for uploaded_file in uploaded_files:
-        file_path = os.path.join(os.getcwd(),st.session_state['id'], uploaded_file.name)
-        if(uploaded_file.type=="application/pdf"):
+        file_path = os.path.join(directory, uploaded_file.name)
+        if uploaded_file.type == "application/pdf":
             with open(file_path, "wb") as file:
                 file.write(uploaded_file.getvalue())
         else:
-            bytes_data = str(uploaded_file.read(),"utf-8")
+            bytes_data = uploaded_file.getvalue().decode("utf-8")
             with open(file_path, "w") as file:
                 file.write(bytes_data)
 
+# Function to create embeddings from uploaded documents
+def create_embeddings(session_id):
+    documents = []
+    directory = os.path.join(os.getcwd(), session_id)
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if filename.endswith(".pdf"):
+            loader = PyPDFLoader(file_path)
+            docs = loader.load()
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+            documents += text_splitter.split_documents(docs)
+        else:
+            loader = TextLoader(file_path)
+            text_documents = loader.load()
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
+            documents += text_splitter.split_documents(text_documents)
+    return documents
+st.set_page_config(page_title="Groq LLM SaaS Playground", page_icon="🤖", layout="wide")
+# Add custom CSS to beautify the app
+st.markdown("""
+    <style>
+        body {
+            background-color: #f4f7fa;
+            font-family: 'Helvetica', sans-serif;
+        }
+        .stButton button {
+            background-color: #4CAF50; 
+            color: white;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+        }
+        .stButton button:hover {
+            background-color: #45a049;
+        }
+        .stTextInput input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .stTextArea textarea {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .stMarkdown {
+            font-size: 1.2em;
+            line-height: 1.5;
+        }
+        .chat-container {
+            background-color: #ffffff;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        .user-msg {
+            background-color: #d1f7ff;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        .ai-msg {
+            background-color: #e8e8e8;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+        .sidebar-title {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .sidebar-subtitle {
+            font-size: 14px;
+            color: #888;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Main application logic
 def main():
-    st.set_page_config(page_title="Groq LLM SaaS Playground", page_icon="🤖", layout="wide")
-    st.title("🤖 Groq LLM SaaS Playground")
+    # Set page config must be the first Streamlit command
+    
+
+    # Header and attribution
+    st.markdown("<h1>Built by <a href='https://github.com/Bipul70701/RAG_File_Upload'>Novadev AI</a> with ❤️</h1>", unsafe_allow_html=True)
+
+    # Sidebar configuration
     st.sidebar.title("⚙️ Application Settings")
     st.sidebar.markdown("Interact with open-source LLMs using Groq API.")
     
     if 'groq_api_key' not in st.session_state:
         st.session_state['groq_api_key'] = ''
         st.session_state['authenticated'] = False
-        uploaded_files=""
+        uploaded_files = None
 
+    # Handle authentication
     if not st.session_state['authenticated']:
         with st.expander("🔑 Enter Your GROQ API Key to Unlock", expanded=True):
             groq_api_key = st.text_input("GROQ API Key", type="password")
-            uploaded_files = st.file_uploader("Choose a File",type=['pdf','txt'],accept_multiple_files=True)
+            uploaded_files = st.file_uploader("Please upload your document in .txt or .pdf format.", type=['pdf', 'txt'], accept_multiple_files=True)
+
             if st.button("Unlock Application"):
                 if groq_api_key and uploaded_files:
                     st.session_state['groq_api_key'] = groq_api_key
                     st.session_state['authenticated'] = True
-                    st.session_state['id']=str(random.randint(1,10000000000))
+                    session_id = str(random.randint(1, 10000000000))
+                    st.session_state['id'] = session_id
                     st.success("API Key authenticated successfully!")
-                    helper(uploaded_files)
-                    st.rerun()
+                    save_uploaded_files(uploaded_files, st.session_state['id'])
+
+                    with st.spinner('Embeddings are in process...'):
+                        st.rerun()
                 else:
-                    st.error("Please enter a valid API key.")
+                    st.error("Please enter a valid API key and upload files.")
+
         return
 
-    st.sidebar.subheader("🤖 Chat Settings")
-
-    # Model selection with more options
-    m = st.sidebar.selectbox(
+    # Once authenticated, proceed to chat and embeddings
+    st.sidebar.subheader("Chat Settings")
+    
+    # Model selection dropdown
+    model_name = st.sidebar.selectbox(
         'Choose a model',
         [ 'llama3-8b-8192','gemma-7b-it','gemma2-9b-it',
         'llama3-groq-70b-8192-tool-use-preview','llama3-groq-8b-8192-tool-use-preview',
@@ -67,96 +160,72 @@ def main():
         'llava-v1.5-7b-4096-preview','mixtral-8x7b-32768']
 
     )
-    model=ChatGroq(model_name=m,groq_api_key=st.session_state['groq_api_key'])
-    
 
+    # Initialize model and embedding
+    model = ChatGroq(model_name=model_name, groq_api_key=st.session_state['groq_api_key'])
     parser = StrOutputParser()
-
-
+    
+    # Define the chat prompt template
     template = """
-    Answer the question based on the context below. If you can't 
-    answer the question, reply "I don't know".
-
+    Answer the question based on the context below. If you're unable to answer, 
+    search online. If the answer is still unavailable, reply with "I don't know".
+    
     Context: {context}
-
+    
     Question: {question}
-    """
+"""
 
     prompt = ChatPromptTemplate.from_template(template)
-    documents=[]
-    directory = os.path.join(os.getcwd(),st.session_state['id'])
-    for filename in os.listdir(directory):
-        file_path = os.path.join(directory, filename)
-        if(filename[-3:]=="pdf"):
-            loader = PyPDFLoader(file_path)
-            docs = loader.load()
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
-            documents=documents+ text_splitter.split_documents(docs)
-        else:
-            loader = TextLoader(file_path)
-            text_documents = loader.load()
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=20)
-            documents = documents+text_splitter.split_documents(text_documents)
     
-    model_name = "BAAI/bge-small-en"
-    model_kwargs = {"device": "cpu"}
-    encode_kwargs = {"normalize_embeddings": True}
-    embeddings = HuggingFaceBgeEmbeddings(model_name=model_name, model_kwargs=model_kwargs, encode_kwargs=encode_kwargs)
+    # Create embeddings for the uploaded documents
+    documents = create_embeddings(st.session_state['id'])
+    embeddings = HuggingFaceBgeEmbeddings(model_name="BAAI/bge-small-en", model_kwargs={"device": "cpu"}, encode_kwargs={"normalize_embeddings": True})
 
-
-    
-
+    # Set up the vector store for document retrieval
     from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-    vectorstore2 = DocArrayInMemorySearch.from_documents(documents, embeddings)
+    vectorstore = DocArrayInMemorySearch.from_documents(documents, embeddings)
     chain = (
-        {"context": vectorstore2.as_retriever(), "question": RunnablePassthrough()}
+        {"context": vectorstore.as_retriever(), "question": RunnablePassthrough()}
         | prompt
         | model
         | parser
     )
-    
-   
-   
+
+    # User interaction: Asking questions
     st.markdown("## 💬 Chat with the Model")
     user_question = st.text_area("📝 Ask a question:", placeholder="Type your query here...")
+
     if 'chat_history' not in st.session_state:
         st.session_state['chat_history'] = []
 
-    try:
-        
-        if user_question:
-            with st.spinner("Thinking..."):
-                response=chain.invoke(user_question)
-                message = {"human": user_question, "AI": response}
-                st.session_state['chat_history'].append(message)
-                st.write("🤖 ChatBot:", response)
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
-    
-    st.markdown("### 📜 Chat History")
+    if user_question:
+        with st.spinner("Thinking..."):
+            response = chain.invoke(user_question)
+            message = {"human": user_question, "AI": response}
+            st.session_state['chat_history'].append(message)
+            st.write("🤖 ChatBot:", response)
+
+    # Display chat history with enhanced styling
+    st.markdown("📜 Chat History")
     chat_container = st.container()
     with chat_container:
         for message in st.session_state['chat_history']:
-            st.markdown(f"*👤 You*: {message['human']}", unsafe_allow_html=True)
-            st.markdown(f"*🤖 AI*: {message['AI']}", unsafe_allow_html=True)
+            st.markdown(f'<div class="chat-container"><div class="user-msg"><strong>👤 You:</strong> {message["human"]}</div><div class="ai-msg"><strong>🤖 AI:</strong> {message["AI"]}</div></div>', unsafe_allow_html=True)
 
-    # Sidebar Buttons
+    # Sidebar buttons for clearing chat history and logging out
     st.sidebar.markdown("---")
     if st.sidebar.button("Clear Chat History"):
         st.session_state['chat_history'] = []
         st.rerun()
 
     if st.sidebar.button("Log Out"):
+        # Log out and clean up session
         st.session_state['authenticated'] = False
         st.session_state['groq_api_key'] = ''
         st.session_state['chat_history'] = []
-        shutil.rmtree(os.path.join(os.getcwd(),st.session_state['id']))
-        st.session_state['id']=''
+        shutil.rmtree(os.path.join(os.getcwd(), st.session_state['id']))
+        st.session_state['id'] = ''
         st.rerun()
-
-    
-
-
 
 if __name__ == "__main__":
     main()
