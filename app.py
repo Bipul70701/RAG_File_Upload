@@ -113,7 +113,6 @@ def main():
     
 
     # Header and attribution
-    st.markdown("<h1>Built by <a href='https://github.com/Bipul70701/RAG_File_Upload'>Novadev AI</a> with ❤️</h1>", unsafe_allow_html=True)
 
     # Sidebar configuration
     st.sidebar.title("⚙️ Application Settings")
